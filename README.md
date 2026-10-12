@@ -114,3 +114,7 @@ $env:GITHUB_PAGES = "true"
 npm.cmd run build
 Remove-Item Env:GITHUB_PAGES
 ```
+
+## Vercel deployment
+
+Keep the Vercel project Root Directory at the repository root. The root vercel.json installs frontend dependencies, builds the static site with FUNDAAI_STATIC_EXPORT=true, and publishes frontend/out. Vercel serves stories at the domain root; GitHub Pages retains its /FundaAI path. The hosted reading experience uses the bundled draft stories and does not require the local API.
