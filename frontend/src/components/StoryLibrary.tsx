@@ -1,11 +1,12 @@
-import type { Metadata } from "next";
+"use client";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { getPassages } from "@/lib/passages";
+import type { PassageSummary } from "@/types/passage";
 import type { Language, Level } from "@/types/passage";
 
-export const metadata: Metadata = { title: "Story library | FundaAI" };
 
-type Filters = { language?: string | string[]; level?: string | string[] };
+
+
 const languageOptions: { id: Language; label: string }[] = [
   { id: "shona", label: "Shona" },
   { id: "ndebele", label: "Ndebele" },
@@ -23,11 +24,12 @@ function filterHref(language: Language | null, level: Level | null) {
   return query.size ? `/library?${query.toString()}` : "/library";
 }
 
-export default async function Library({ searchParams }: { searchParams: Promise<Filters> }) {
-  const filters = await searchParams;
+export default function StoryLibrary({ passages }: { passages: PassageSummary[] }) {
+  const searchParams = useSearchParams();
+  const filters = { language: searchParams.get("language"), level: searchParams.get("level") };
   const language = languageOptions.find((item) => item.id === filters.language)?.id ?? null;
   const level = levelOptions.find((item) => item.id === filters.level)?.id ?? null;
-  const matches = await getPassages({ language, level });
+  const matches = passages.filter((passage) => (!language || passage.language === language) && (!level || passage.level === level));
 
   return <section className="library-section">
     <div className="library-heading"><p className="eyebrow">THE STORY LIBRARY</p><h1>Find a story for today.</h1><p>Explore draft passages in Shona and Zimbabwean Ndebele. Choose a language and reading level to narrow the collection.</p></div>
@@ -44,3 +46,4 @@ export default async function Library({ searchParams }: { searchParams: Promise<
     </article>)}</div> : <div className="library-empty"><h2>No stories match these filters.</h2><p>Try another language or level.</p><Link className="text-link" href="/library">Show all stories ↗</Link></div>}
   </section>;
 }
+

@@ -1,0 +1,9 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "Start FundaAI", "type": "shell", "command": "npm.cmd", "args": ["run", "dev"], "isBackground": true, "problemMatcher": [], "presentation": { "reveal": "always", "panel": "dedicated" } },
+    { "label": "Check frontend", "type": "shell", "command": "npm.cmd", "args": ["run", "lint"], "problemMatcher": [] },
+    { "label": "Build FundaAI", "type": "shell", "command": "npm.cmd", "args": ["run", "build"], "problemMatcher": [], "group": "build" }
+  ]
+}
+

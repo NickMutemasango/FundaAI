@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { getHealth } from "@/lib/api";
 
 export default function ApiStatus() {
+  if (process.env.NEXT_PUBLIC_STATIC_STORIES === "true") return <span className="api-status api-status-online">Stories ready to read</span>;
+  return <LiveApiStatus />;
+}
+
+function LiveApiStatus() {
   const [status, setStatus] = useState<"checking" | "online" | "offline">("checking");
 
   useEffect(() => {
