@@ -1,0 +1,5 @@
+{
+  "name": "fundaai-html", "private": true, "version": "1.1.0", "type": "module",
+  "engines": {"node": ">=22"},
+  "scripts": {"start": "node --env-file-if-exists=.env server.mjs", "test": "node --test server.test.mjs"}
+}
