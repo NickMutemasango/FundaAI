@@ -1,7 +1,7 @@
 import {randomBytes,createCipheriv,createDecipheriv} from 'node:crypto';
 
 const schema={type:'object',properties:{prompt:{type:'string'},options:{type:'array',items:{type:'string'},minItems:3,maxItems:3},correctIndex:{type:'integer',enum:[0,1,2]},explanation:{type:'string'}},required:['prompt','options','correctIndex','explanation'],additionalProperties:false};
-export function createQuizService({stories,apiKey,model,fetchImpl}) {
+export function createQuizService({stories,apiKey,model,fetchImpl,getStory=id=>stories.find(x=>x.id===id)}) {
  const key=randomBytes(32);
  const fail=(status,error)=>({status,data:{error}});
  function seal(value){const iv=randomBytes(12);const cipher=createCipheriv('aes-256-gcm',key,iv);const encrypted=Buffer.concat([cipher.update(JSON.stringify(value),'utf8'),cipher.final()]);return Buffer.concat([iv,cipher.getAuthTag(),encrypted]).toString('base64url');}
@@ -21,7 +21,7 @@ export function createQuizService({stories,apiKey,model,fetchImpl}) {
   if(!body||typeof body!=='object'||Array.isArray(body))return fail(400,'Invalid quiz request.');
   let state;
   if(path==='/api/quiz'){
-   const story=stories.find(x=>x.id===body.passageId);if(!story)return fail(404,'Story not found.');
+   const story=getStory(body.passageId);if(!story)return fail(404,'Story not found.');
    state={passageId:story.id,previous:[],expires:Date.now()+60*60*1000};
   }else{
    try{state=open(body.token);}catch{return fail(410,'This quiz expired or the backend restarted. Start a new quiz.');}
@@ -34,7 +34,8 @@ export function createQuizService({stories,apiKey,model,fetchImpl}) {
   }
   if(!apiKey)return fail(503,'AI quizzes are not configured yet. The owner needs to add OPENAI_API_KEY in Render.');
   try{
-   const story=stories.find(x=>x.id===state.passageId);
+   const story=getStory(state.passageId);
+   if(!story)return fail(410,'This generated story expired. Generate another story and start a new quiz.');
    state.current=await generate(story,state.previous);
    const feedback=state.feedback;delete state.feedback;
    return {status:200,data:{...(path==='/api/quiz/answer'?{correct:true,feedback}:{}),complete:false,question:question(state)}};

@@ -50,3 +50,24 @@ test('AI quiz fails clearly without key and rejects malformed generated answers'
  await running({apiKey:''},async base=>{const res=await fetch(base+'/api/quiz',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({passageId:'shona-beginner'})});assert.equal(res.status,503);});
  await running({apiKey:'test',fetchImpl:async()=>Response.json({output:[{type:'message',content:[{type:'output_text',text:'{"prompt":"bad"}'}]}]})},async base=>{const res=await fetch(base+'/api/quiz',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({passageId:'shona-beginner'})});assert.equal(res.status,502);});
 });
+test('short story generation preserves language/level and feeds new passage to quiz and chat',()=>running({apiKey:'test',frontendOrigins:'null',fetchImpl:async(url,options)=>{
+ const payload=JSON.parse(options.body);
+ let text;
+ if(payload.text?.format.name==='short_story') {assert(payload.instructions.includes('60 words'));text=JSON.stringify({title:'Nyaya itsva',summary:'A short new story.',paragraphs:['Tariro anomuka mangwanani achienda kuchikoro neshamwari yake. Vanofamba pamwe vachitaura nezvemabhuku avo. Kusvika kuchikoro vanogara pasi votanga kuverenga.'],vocabulary:[{word:'mangwanani',meaning:'Morning'},{word:'kuchikoro',meaning:'To school'},{word:'mabhuku',meaning:'Books'}]});}
+ else if(payload.text?.format.name==='passage_question'){const data=JSON.parse(payload.input);assert.equal(data.title,'Nyaya itsva');assert(data.paragraphs[0].startsWith('Tariro anomuka'));text=JSON.stringify({prompt:'Who goes to school?',options:['Tariro','A farmer','No one'],correctIndex:0,explanation:'The story names Tariro.'});}
+ else{assert.equal(JSON.parse(payload.input).story.title,'Nyaya itsva');text='Tariro goes to school.';}
+ return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text}]}]});
+}},async base=>{
+ const call=async(path,body)=>{const r=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',Origin:'null'},body:JSON.stringify(body)});return {status:r.status,body:await r.json()};};
+ const generated=await call('/api/stories/generate',{language:'shona',level:'beginner'});assert.equal(generated.status,200);const s=generated.body.story;assert.equal(s.language,'shona');assert.equal(s.level,'beginner');assert(s.wordCount<=60);assert(s.id.startsWith('generated-'));assert.equal(s.question,undefined);
+ const quiz=await call('/api/quiz',{passageId:s.id});assert.equal(quiz.status,200);assert.equal(quiz.body.question.prompt,'Who goes to school?');
+ const chat=await call('/api/chat',{passageId:s.id,question:'Who goes to school?'});assert.equal(chat.status,200);assert.equal(chat.body.answer,'Tariro goes to school.');
+ assert.equal((await call('/api/stories/generate',{language:'english',level:'beginner'})).status,400);
+ assert.equal((await call('/api/stories/generate',{language:'ndebele',level:'expert'})).status,400);
+ const pre=await fetch(base+'/api/stories/generate',{method:'OPTIONS',headers:{Origin:'null'}});assert.equal(pre.status,204);
+}));
+test('story generation enforces short limits for every level and handles missing API key',async()=>{
+ for(const [level,max] of [['beginner',60],['intermediate',85],['advanced',110]]){
+ await running({apiKey:'test',fetchImpl:async(url,options)=>{const payload=JSON.parse(options.body);assert(payload.instructions.includes(`${max} words`));return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({title:'Indaba',summary:'A draft.',paragraphs:[Array(max+1).fill('word').join(' ')],vocabulary:[{word:'word',meaning:'A word'},{word:'next',meaning:'Next'},{word:'last',meaning:'Last'}]})}]}]});}},async base=>{const r=await fetch(base+'/api/stories/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:'ndebele',level})});assert.equal(r.status,502);});}
+ await running({apiKey:''},async base=>{const r=await fetch(base+'/api/stories/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({language:'shona',level:'beginner'})});assert.equal(r.status,503);});
+});
