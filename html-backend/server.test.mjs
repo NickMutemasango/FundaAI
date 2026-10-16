@@ -27,3 +27,26 @@ test('separate local frontend: preflight and errors include exact allowed origin
  assert.equal((await post(base,question,{Origin:'null'})).status,403);
  assert.equal((await fetch(base+'/')).status,404);assert.equal((await fetch(base+'/app.js')).status,404);assert.equal((await fetch(base+'/api/health')).status,200);
 }));
+test('submission files: null origin allowed only when explicitly configured',()=>running({apiKey:'',frontendOrigins:'null',apiOnly:true},async base=>{
+ const res=await fetch(base+'/api/chat',{method:'OPTIONS',headers:{Origin:'null','Access-Control-Request-Method':'POST'}});
+ assert.equal(res.status,204);assert.equal(res.headers.get('access-control-allow-origin'),'null');
+ const answer=await post(base,question,{Origin:'null'});assert.equal(answer.status,503);assert.equal(answer.headers.get('access-control-allow-origin'),'null');
+ assert.equal((await post(base,question,{Origin:'https://untrusted.example'})).status,403);
+}));
+test('AI quiz: wrong answers stay, correct answers advance, five completes, key stays hidden',()=>running({apiKey:'test',frontendOrigins:'null',fetchImpl:async(url,options)=>{
+ const payload=JSON.parse(options.body);assert.equal(payload.text.format.type,'json_schema');assert.equal(payload.store,false);const input=JSON.parse(payload.input);assert.equal(input.paragraphs.length,2);
+ const number=input.previousQuestions.length+1;
+ return Response.json({status:'completed',output:[{type:'message',content:[{type:'output_text',text:JSON.stringify({prompt:`Passage question ${number}?`,options:['Harare','Bulawayo','Mutare'],correctIndex:0,explanation:'The passage says Harare.'})}]}]});
+}},async base=>{
+ const call=async(path,body)=>{const res=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',Origin:'null'},body:JSON.stringify(body)});return {status:res.status,body:await res.json()};};
+ const pre=await fetch(base+'/api/quiz',{method:'OPTIONS',headers:{Origin:'null'}});assert.equal(pre.status,204);
+ let r=await call('/api/quiz',{passageId:'shona-beginner'});assert.equal(r.status,200);let q=r.body.question;assert.equal(q.number,1);assert.equal(q.total,5);assert.equal(q.correctIndex,undefined);assert.equal(q.explanation,undefined);
+ const wrong=await call('/api/quiz/answer',{token:q.token,answer:1});assert.equal(wrong.body.correct,false);assert.equal(wrong.body.question,undefined);
+ assert.equal((await call('/api/quiz/answer',{token:q.token,answer:8})).status,400);
+ assert.equal((await call('/api/quiz/answer',{token:q.token.slice(0,-6)+'broken',answer:0})).status,410);
+ for(let n=1;n<=5;n++){r=await call('/api/quiz/answer',{token:q.token,answer:0});assert.equal(r.status,200);assert.equal(r.body.correct,true);if(n<5){q=r.body.question;assert.equal(q.number,n+1);}else{assert.equal(r.body.complete,true);assert.equal(r.body.completed,5);assert.equal(r.body.question,undefined);}}
+}));
+test('AI quiz fails clearly without key and rejects malformed generated answers',async()=>{
+ await running({apiKey:''},async base=>{const res=await fetch(base+'/api/quiz',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({passageId:'shona-beginner'})});assert.equal(res.status,503);});
+ await running({apiKey:'test',fetchImpl:async()=>Response.json({output:[{type:'message',content:[{type:'output_text',text:'{"prompt":"bad"}'}]}]})},async base=>{const res=await fetch(base+'/api/quiz',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({passageId:'shona-beginner'})});assert.equal(res.status,502);});
+});
